@@ -1,4 +1,8 @@
-import PIL
+# -------------------------------------
+#ラベリングによる学習/検証データの準備
+# -------------------------------------
+
+from PIL import Image
 import os, glob
 import numpy as np
 import random, math
@@ -15,12 +19,22 @@ Y = []
 
 # 画像データごとにadd_sample()を呼び出し、X,Yの配列を返す関数
 def make_sample(files):
-    pass
+    global X, Y
+    X = []
+    Y = []
+    for category_index, file_name in files:
+        add_sample(category_index, file_name)
+    return np.array(X), np.array(Y)
 
 # 渡された画像データを読み込んでXに格納し、
 # 画像データに対応するcategoryのidxをYに格納する関数
 def add_sample(category_index, file_name):
-    pass
+    img = Image.open(file_name)
+    img = img.convert("RGB")
+    img = img.resize((150, 150))
+    data = np.asarray(img)
+    X.append(data)
+    Y.append(category_index)
 
 # 全データ格納用配列
 allfiles = []
@@ -41,6 +55,62 @@ X_train, Y_train = make_sample(train)
 X_test, Y_test = make_sample(test)
 xy = (X_train, Y_train, X_test, Y_test)
 # データを保存する（データの名前を「fruit_data.npy」としている
-np.save(root_dir + "/fruit_data.npy")
+np.save(str(root_dir + "/fruit_data.npy"), xy)
 
+# -------------------------------------
+# モデルの構築
+# -------------------------------------
+from keras import models as mdl, layers as ly
+
+model = mdl.Sequential()
+model.add(ly.Conv2D(32,(3,3),activation="relu",input_shape=(150,150,3)))
+model.add(ly.MaxPooling2D(2,2))
+model.add(ly.Conv2D(64,(3,3),activation="relu"))
+model.add(ly.MaxPooling2D(2,2))
+model.add(ly.Conv2D(128,(3,3),activation="relu"))
+model.add(ly.MaxPooling2D(2,2))
+model.add(ly.Conv2D(128,(3,3),activation="relu"))
+model.add(ly.MaxPooling2D(2,2))
+model.add(ly.Flatten())
+model.add(ly.Dense(512, activation="relu"))
+model.add(ly.Dense(10, activation="sigmoid")) # 分類先の種類分設定
+
+# モデル構成の確認
+model.summary()
+
+
+# -------------------------------------
+# モデルのコンパイル
+# -------------------------------------
+from keras import optimizers as opt
+
+model.compile(
+    loss="binary_crossentropy",
+    optimizer=opt.RMSprop(lr=1e-4),
+    metrics=["acc"])
+
+# -------------------------------------
+# データの準備
+# -------------------------------------
+from keras.utils import np_utils
+
+nb_classes = len(categories)
+
+X_train, X_test, Y_test, Y_test = np.load(str(root_dir + "/fruit_data.npy"))
+
+# データの正規化
+X_train = X_train.asType("float") / 255
+X_test = X_test.asType("float") / 255
+
+# kerasで扱えるようにcategoriesをｗベクトルに変換
+Y_train = np_utils.to_categorical(Y_train, nb_classes)
+Y_test = np_utils.to_categorical(Y_test, nb_classes)
+
+# モデルの学習
+model = model.fit(
+    X_train,
+    Y_train,
+    epochs=10,
+    batch_size=6,
+    validation_data=(X_test, Y_test))
 
